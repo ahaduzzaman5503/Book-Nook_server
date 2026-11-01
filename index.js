@@ -1,4 +1,3 @@
-
 import express from 'express';
 import cors from 'cors';
 import { MongoClient } from 'mongodb';
@@ -13,12 +12,19 @@ app.use(express.json());
 
 // MongoDB connection
 const client = new MongoClient(process.env.MONGODB_URI);
+
 let booksCollection;
+let featuresCollection;
+
 async function connectToMongoDB() {
     try {
         await client.connect();
+
         const db = client.db('booknook');
+
         booksCollection = db.collection('all_books');
+        featuresCollection = db.collection('featuresdata');
+
         console.log('Successfully connected to MongoDB!');
     } catch (error) {
         console.error('MongoDB connection failed:', error);
@@ -44,6 +50,21 @@ app.get('/all_books', async (req, res) => {
 
         res.status(500).json({
             message: 'Failed to fetch books'
+        });
+    }
+});
+
+// Get all features
+app.get('/featuresdata', async (req, res) => {
+    try {
+        const features = await featuresCollection.find({}).toArray();
+
+        res.status(200).json(features);
+    } catch (error) {
+        console.error('Error fetching features:', error);
+
+        res.status(500).json({
+            message: 'Failed to fetch features'
         });
     }
 });
