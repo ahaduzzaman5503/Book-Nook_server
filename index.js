@@ -15,6 +15,7 @@ const client = new MongoClient(process.env.MONGODB_URI);
 
 let booksCollection;
 let featuresCollection;
+let reviewsCollection;
 
 async function connectToMongoDB() {
     try {
@@ -24,6 +25,7 @@ async function connectToMongoDB() {
 
         booksCollection = db.collection('all_books');
         featuresCollection = db.collection('featuresdata');
+        reviewsCollection = db.collection('reviewsdata');
 
         console.log('Successfully connected to MongoDB!');
     } catch (error) {
@@ -65,6 +67,20 @@ app.get('/featuresdata', async (req, res) => {
 
         res.status(500).json({
             message: 'Failed to fetch features'
+        });
+    }
+});
+
+app.get('/reviewsdata', async (req, res) => {
+    try {
+        const reviews = await reviewsCollection.find({}).toArray();
+
+        res.status(200).json(reviews);
+    } catch (error) {
+        console.error('Error fetching reviews:', error);
+
+        res.status(500).json({
+            message: 'Failed to fetch reviews'
         });
     }
 });
