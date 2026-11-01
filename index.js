@@ -1,8 +1,7 @@
 import express from "express";
 import cors from "cors";
-import { MongoClient } from "mongodb";
+import { MongoClient, ObjectId } from "mongodb";
 import "dotenv/config";
-import { ObjectId } from 'mongodb';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -18,6 +17,7 @@ let booksCollection;
 let featuresCollection;
 let reviewsCollection;
 
+// Connect to MongoDB
 async function connectToMongoDB() {
   try {
     await client.connect();
@@ -37,19 +37,22 @@ async function connectToMongoDB() {
 
 // Root API
 app.get("/", (req, res) => {
-  res.send({
-    mes: "BookNook server is running fine",
+  res.status(200).json({
+    message: "BookNook server is running fine",
   });
 });
 
-// Get all books
+// GET ALL BOOKS (Newest books first)
 app.get("/books", async (req, res) => {
   try {
-    const books = await booksCollection.find({}).toArray();
+    const books = await booksCollection
+      .find({})
+      .sort({ createdAt: -1 })
+      .toArray();
 
     res.status(200).json(books);
   } catch (error) {
-    console.error("Error fetching books:", error);
+    console.error("Error fetching all books:", error);
 
     res.status(500).json({
       message: "Failed to fetch books",
@@ -57,36 +60,64 @@ app.get("/books", async (req, res) => {
   }
 });
 
-// Get all features
-app.get("/featuresdata", async (req, res) => {
+// GET MY BOOKS (Only user's added books)
+app.get("/my-books", async (req, res) => {
   try {
-    const features = await featuresCollection.find({}).toArray();
+    const email = req.query.email;
 
-    res.status(200).json(features);
+    if (!email) {
+      return res.status(400).json({
+        message: "User email is required",
+      });
+    }
+
+    const books = await booksCollection
+      .find({ "addedBy.email": email })
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    res.status(200).json(books);
   } catch (error) {
-    console.error("Error fetching features:", error);
+    console.error("Error fetching user books:", error);
 
     res.status(500).json({
-      message: "Failed to fetch features",
+      message: "Failed to fetch your books",
     });
   }
 });
 
-app.get("/reviewsdata", async (req, res) => {
+// GET SINGLE BOOK BY ID
+app.get("/books/:id", async (req, res) => {
   try {
-    const reviews = await reviewsCollection.find({}).toArray();
+    const { id } = req.params;
 
-    res.status(200).json(reviews);
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({
+        message: "Invalid book ID",
+      });
+    }
+
+    const book = await booksCollection.findOne({
+      _id: new ObjectId(id),
+    });
+
+    if (!book) {
+      return res.status(404).json({
+        message: "Book not found",
+      });
+    }
+
+    res.status(200).json(book);
   } catch (error) {
-    console.error("Error fetching reviews:", error);
+    console.error("Error fetching book:", error);
 
     res.status(500).json({
-      message: "Failed to fetch reviews",
+      message: "Failed to fetch book",
     });
   }
 });
 
-// Add a new book
+// ADD A NEW BOOK
 app.post("/books", async (req, res) => {
   try {
     const {
@@ -101,13 +132,13 @@ app.post("/books", async (req, res) => {
     } = req.body;
 
     if (
-      !title ||
-      !author ||
+      !title?.trim() ||
+      !author?.trim() ||
       !category ||
-      !image ||
-      !description ||
-      !name ||
-      !email
+      !image?.trim() ||
+      !description?.trim() ||
+      !name?.trim() ||
+      !email?.trim()
     ) {
       return res.status(400).json({
         message: "Please provide all required fields",
@@ -123,22 +154,23 @@ app.post("/books", async (req, res) => {
     }
 
     const newBook = {
-      title,
-      author,
+      title: title.trim(),
+      author: author.trim(),
       category,
-      image,
-      description,
+      image: image.trim(),
+      description: description.trim(),
       totalCopies: copies,
       availableCopies: copies,
       addedBy: {
-        name,
-        email,
+        name: name.trim(),
+        email: email.trim(),
       },
       createdAt: new Date(),
       updatedAt: new Date(),
     };
 
     const result = await booksCollection.insertOne(newBook);
+
     res.status(201).json({
       message: "Book added successfully",
       insertedId: result.insertedId,
@@ -152,57 +184,162 @@ app.post("/books", async (req, res) => {
   }
 });
 
-// Get a single book by ID
-app.get('/books/:id', async (req, res) => {
-    try {
-        const { id } = req.params;
+// UPDATE A BOOK
+app.patch("/books/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
 
-        if (!ObjectId.isValid(id)) {
-            return res.status(400).json({
-                message: 'Invalid book ID'
-            });
-        }
+    const { title, author, category, image, description, totalCopies } =
+      req.body;
 
-        const book = await booksCollection.findOne({
-            _id: new ObjectId(id)
-        });
-
-        if (!book) {
-            return res.status(404).json({
-                message: 'Book not found'
-            });
-        }
-
-        res.status(200).json(book);
-
-    } catch (error) {
-        console.error('Error fetching book:', error);
-
-        res.status(500).json({
-            message: 'Failed to fetch book'
-        });
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({
+        message: "Invalid book ID",
+      });
     }
+
+    if (
+      !title?.trim() ||
+      !author?.trim() ||
+      !category ||
+      !image?.trim() ||
+      !description?.trim()
+    ) {
+      return res.status(400).json({
+        message: "Please provide all required fields",
+      });
+    }
+
+    const copies = Number(totalCopies);
+
+    if (!Number.isInteger(copies) || copies < 1) {
+      return res.status(400).json({
+        message: "Total copies must be at least 1",
+      });
+    }
+
+    const existingBook = await booksCollection.findOne({
+      _id: new ObjectId(id),
+    });
+
+    if (!existingBook) {
+      return res.status(404).json({
+        message: "Book not found",
+      });
+    }
+
+    const borrowedCopies =
+      Number(existingBook.totalCopies) - Number(existingBook.availableCopies);
+
+    if (copies < borrowedCopies) {
+      return res.status(400).json({
+        message: `At least ${borrowedCopies} copies are currently borrowed`,
+      });
+    }
+
+    await booksCollection.updateOne(
+      { _id: new ObjectId(id) },
+      {
+        $set: {
+          title: title.trim(),
+          author: author.trim(),
+          category,
+          image: image.trim(),
+          description: description.trim(),
+          totalCopies: copies,
+          availableCopies: copies - borrowedCopies,
+          updatedAt: new Date(),
+        },
+      },
+    );
+
+    res.status(200).json({
+      message: "Book updated successfully",
+    });
+  } catch (error) {
+    console.error("Error updating book:", error);
+
+    res.status(500).json({
+      message: "Failed to update book",
+    });
+  }
 });
 
+// DELETE A BOOK
+app.delete("/books/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
 
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({
+        message: "Invalid book ID",
+      });
+    }
 
+    const result = await booksCollection.deleteOne({
+      _id: new ObjectId(id),
+    });
 
+    if (result.deletedCount === 0) {
+      return res.status(404).json({
+        message: "Book not found",
+      });
+    }
 
+    res.status(200).json({
+      message: "Book deleted successfully",
+    });
+  } catch (error) {
+    console.error("Error deleting book:", error);
 
+    res.status(500).json({
+      message: "Failed to delete book",
+    });
+  }
+});
 
+// GET ALL FEATURES
+app.get("/featuresdata", async (req, res) => {
+  try {
+    const features = await featuresCollection.find({}).toArray();
 
+    res.status(200).json(features);
+  } catch (error) {
+    console.error("Error fetching features:", error);
 
+    res.status(500).json({
+      message: "Failed to fetch features",
+    });
+  }
+});
 
+// GET ALL REVIEWS
+app.get("/reviewsdata", async (req, res) => {
+  try {
+    const reviews = await reviewsCollection.find({}).toArray();
 
+    res.status(200).json(reviews);
+  } catch (error) {
+    console.error("Error fetching reviews:", error);
 
+    res.status(500).json({
+      message: "Failed to fetch reviews",
+    });
+  }
+});
 
-// Start server after MongoDB connection
+// START SERVER AFTER DATABASE CONNECTION
 async function startServer() {
-  await connectToMongoDB();
+  try {
+    await connectToMongoDB();
 
-  app.listen(PORT, () => {
-    console.log(`BookNook server is running at ${PORT}`);
-  });
+    app.listen(PORT, () => {
+      console.log(`BookNook server is running at ${PORT}`);
+    });
+  } catch (error) {
+    console.error("Server startup failed:", error);
+    process.exit(1);
+  }
 }
 
 startServer();
