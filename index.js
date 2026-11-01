@@ -85,6 +85,59 @@ app.get('/reviewsdata', async (req, res) => {
     }
 });
 
+// Add a new book
+app.post('/all_books', async (req, res) => {
+    try {
+        const {title, author, category, image, description, name, email, totalCopies } = req.body;
+
+        if (
+            !title ||
+            !author ||
+            !category ||
+            !image ||
+            !description ||
+            !name ||
+            !email
+        ) {
+            return res.status(400).json({
+                message: 'Please provide all required fields'
+            });
+        }
+
+        const copies = Number(totalCopies);
+
+        if (!Number.isInteger(copies) || copies < 1) {
+            return res.status(400).json({
+                message: 'Total copies must be at least 1'
+            });
+        }
+
+        const newBook = { title, author, category, image, description, 
+            totalCopies: copies,
+            availableCopies: copies,
+            addedBy: {
+                name,
+                email
+            },
+            createdAt: new Date(),
+            updatedAt: new Date()
+        };
+
+        const result = await booksCollection.insertOne(newBook);
+        res.status(201).json({
+            message: 'Book added successfully',
+            insertedId: result.insertedId
+        });
+
+    } catch (error) {
+        console.error('Error adding book:', error);
+
+        res.status(500).json({
+            message: 'Failed to add book'
+        });
+    }
+});
+
 // Start server after MongoDB connection
 async function startServer() {
     await connectToMongoDB();
