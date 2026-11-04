@@ -35,6 +35,8 @@ async function connectToMongoDB() {
 
   console.log('MongoDB connected successfully');
 }
+    await connectToMongoDB();
+
 
 // Root route
 app.get('/', (req, res) => {
@@ -540,20 +542,11 @@ app.get('/reviewsdata', async (req, res) => {
 // JWT validation will added on here.
 
 
-async function startServer() {
-  try {
-    await connectToMongoDB();
 
     app.listen(PORT, () => {
       console.log(`BookNook server running on port ${PORT}`);
     });
-  } catch (error) {
-    console.error('Server startup error:', error);
-    process.exit(1);
-  }
-}
 
-startServer();
 
 export default app;
 
